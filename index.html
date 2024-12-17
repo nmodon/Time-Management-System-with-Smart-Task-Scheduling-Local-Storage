@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Task Management System</title>
+    <style>
+        :root {
+            --primary-color: #3498db;
+            --secondary-color: #2ecc71;
+            --background-color: #f5f7fa;
+            --text-color: #34495e;
+            --border-color: #bdc3c7;
+            --shadow-color: rgba(0, 0, 0, 0.1);
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            padding: 0;
+            background-color: var(--background-color);
+            color: var(--text-color);
+        }
+        .container {
+            max-width: 1000px;
+            margin: 2rem auto;
+            padding: 2rem;
+            background: whitesmoke;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px var(--shadow-color);
+        }
+        h1, h2, h3 {
+            color: var(--primary-color);
+        }
+        input, select, textarea {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 1rem;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            font-size: 1rem;
+            transition: border-color 0.3s ease;
+        }
+        input:focus, select:focus, textarea:focus {
+            outline: none;
+            border-color: var(--primary-color);
+        }
+        button {
+            background: var(--primary-color);
+            color: white;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 1rem;
+            transition: background-color 0.3s ease;
+        }
+        button:hover {
+            background: #2980b9;
+        }
+        .task {
+            background: white;
+            border: 1px solid var(--border-color);
+            padding: 1rem;
+            margin-bottom: 1rem;
+            border-radius: 4px;
+            transition: box-shadow 0.3s ease;
+        }
+        .task:hover {
+            box-shadow: 0 2px 4px var(--shadow-color);
+        }
+        .task-high { border-left: 5px solid #e74c3c; }
+        .task-medium { border-left: 5px solid #f39c12; }
+        .task-low { border-left: 5px solid #3498db; }
+        .daily-summary, .weekly-overview {
+            margin-top: 2rem;
+            padding: 1rem;
+            background: white;
+            border-radius: 4px;
+            box-shadow: 0 2px 4px var(--shadow-color);
+        }
+        #searchInput {
+            margin-top: 1rem;
+        }
+        .form-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+        }
+        .button-group {
+            display: flex;
+            gap: 0.5rem;
+            margin: 1rem 0;
+        }
+        .task-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 0.5rem;
+            margin-top: 1rem;
+        }
+        .task-actions button {
+            padding: 5px 10px;
+            font-size: 0.9rem;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        .fade-in {
+            animation: fadeIn 0.5s ease-in;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Task Management System</h1>
+        
+        <form id="taskForm" class="fade-in">
+            <div class="form-grid">
+                <input type="text" id="taskTitle" placeholder="Task Title" required>
+                <select id="taskPriority">
+                    <option value="low">Low Priority</option>
+                    <option value="medium">Medium Priority</option>
+                    <option value="high">High Priority</option>
+                </select>
+                <input type="number" id="estimatedTime" placeholder="Estimated Time(minutes)" required>
+                <p>Set Date</p><input type="date" id="taskDay"required>
+               <p1>Start Time</p1> <input type="time" id="startTime" required>
+            </div>
+            <textarea id="taskDescription" placeholder="Task Description" rows="3"></textarea>
+            <button type="submit">Add Task</button>
+        </form>
+
+        <div class="button-group">
+            <button id="showAllTasks">All Tasks</button>
+            <button id="showTodayTasks">Today's Tasks</button>
+        </div>
+
+        <input type="text" id="searchInput" placeholder="Search tasks...">
+
+        <div id="taskList" class="fade-in"></div>
+
+        <div id="dailySummary" class="daily-summary fade-in"></div>
+        <div id="weeklyOverview" class="weekly-overview fade-in"></div>
+    </div>
+
+    <script>
+        let tasks = JSON.parse(localStorage.getItem('tasks')) || [];
+
+        function saveTasksToLocalStorage() {
+            localStorage.setItem('tasks', JSON.stringify(tasks));
+        }
+
+        function addTask(event) {
+            event.preventDefault();
+            const newTask = {
+                id: Date.now(),
+                title: document.getElementById('taskTitle').value,
+                description: document.getElementById('taskDescription').value,
+                priority: document.getElementById('taskPriority').value,
+                estimatedTime: parseInt(document.getElementById('estimatedTime').value),
+                day: document.getElementById('taskDay').value,
+                startTime: document.getElementById('startTime').value,
+                actualTime: 0,
+                completed: false
+            };
+            
+            const conflictingTask = findConflictingTask(newTask);
+            if (conflictingTask) {
+                const nextAvailableSlot = findNextAvailableSlot(newTask);
+                if (confirm(`This task conflicts with "${conflictingTask.title}". Would you like to schedule it for ${nextAvailableSlot.day} at ${nextAvailableSlot.startTime}?`)) {
+                    newTask.day = nextAvailableSlot.day;
+                    newTask.startTime = nextAvailableSlot.startTime;
+                } else {
+                    return; // Don't add the task if the user doesn't want to reschedule
+                }
+            }
+            
+            tasks.push(newTask);
+            saveTasksToLocalStorage();
+            renderTasks();
+            updateDailySummary();
+            updateWeeklyOverview();
+            event.target.reset();
+        }
+
+        function findConflictingTask(newTask) {
+            return tasks.find(task => 
+                task.day === newTask.day && 
+                task.startTime === newTask.startTime
+            );
+        }
+
+        function findNextAvailableSlot(task) {
+            let currentDate = new Date(task.day + 'T' + task.startTime);
+            let found = false;
+            while (!found) {
+                currentDate.setMinutes(currentDate.getMinutes() + task.estimatedTime);
+                const potentialSlot = {
+                    day: currentDate.toISOString().split('T')[0],
+                    startTime: currentDate.toTimeString().slice(0, 5)
+                };
+                if (!findConflictingTask(potentialSlot)) {
+                    found = true;
+                    return potentialSlot;
+                }
+            }
+        }
+
+        function deleteTask(taskId) {
+            tasks = tasks.filter(task => task.id !== taskId);
+            saveTasksToLocalStorage();
+            renderTasks();
+            updateDailySummary();
+            updateWeeklyOverview();
+        }
+
+        function editTask(taskId) {
+            const task = tasks.find(t => t.id === taskId);
+            const newTitle = prompt('Edit task title:', task.title);
+            const newDescription = prompt('Edit task description:', task.description);
+            const newPriority = prompt('Edit task priority (low/medium/high):', task.priority);
+            const newEstimatedTime = prompt('Edit estimated time (minutes):', task.estimatedTime);
+            const newDay = prompt('Edit task day (YYYY-MM-DD):', task.day);
+            const newStartTime = prompt('Edit start time (HH:MM):', task.startTime);
+
+            if (newTitle) task.title = newTitle;
+            if (newDescription) task.description = newDescription;
+            if (newPriority) task.priority = newPriority;
+            if (newEstimatedTime) task.estimatedTime = parseInt(newEstimatedTime);
+            if (newDay) task.day = newDay;
+            if (newStartTime) task.startTime = newStartTime;
+
+            saveTasksToLocalStorage();
+            renderTasks();
+            updateDailySummary();
+            updateWeeklyOverview();
+        }
+
+        function toggleTimer(taskId) {
+            const task = tasks.find(t => t.id === taskId);
+            if (!task.timerRunning) {
+                task.timerStart = Date.now();
+                task.timerRunning = true;
+            } else {
+                const elapsedTime = Math.floor((Date.now() - task.timerStart) / 60000);
+                task.actualTime += elapsedTime;
+                task.timerRunning = false;
+                delete task.timerStart;
+            }
+            saveTasksToLocalStorage();
+            renderTasks();
+            updateDailySummary();
+            updateWeeklyOverview();
+        }
+
+        function renderTasks(filter = 'all') {
+            const taskList = document.getElementById('taskList');
+            taskList.innerHTML = '';
+            
+            let filteredTasks = tasks;
+            if (filter === 'today') {
+                const today = new Date().toISOString().split('T')[0];
+                filteredTasks = tasks.filter(task => task.day === today);
+            }
+
+            const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+            if (searchTerm) {
+                filteredTasks = filteredTasks.filter(task => 
+                    task.title.toLowerCase().includes(searchTerm) || 
+                    task.description.toLowerCase().includes(searchTerm)
+                );
+            }
+
+            filteredTasks.forEach(task => {
+                const taskElement = document.createElement('div');
+                taskElement.className = `task task-${task.priority} fade-in`;
+                taskElement.innerHTML = `
+                    <h3>${task.title}</h3>
+                    <p>${task.description}</p>
+                    <p><strong>Priority:</strong> ${task.priority}</p>
+                    <p><strong>Estimated Time:</strong> ${task.estimatedTime} minutes</p>
+                    <p><strong>Actual Time:</strong> ${task.actualTime} minutes</p>
+                    <p><strong>Day:</strong> ${task.day}</p>
+                    <p><strong>Start Time:</strong> ${task.startTime}</p>
+                    <div class="task-actions">
+                        <button onclick="editTask(${task.id})">Edit</button>
+                        <button onclick="deleteTask(${task.id})">Delete</button>
+                        <button onclick="toggleTimer(${task.id})">${task.timerRunning ? 'Stop' : 'Start'} Timer</button>
+                    </div>
+                `;
+                taskList.appendChild(taskElement);
+            });
+        }
+
+        function updateDailySummary() {
+            const dailySummary = document.getElementById('dailySummary');
+            const today = new Date().toISOString().split('T')[0];
+            const todaysTasks = tasks.filter(task => task.day === today);
+            
+            const totalEstimatedTime = todaysTasks.reduce((sum, task) => sum + task.estimatedTime, 0);
+            const totalActualTime = todaysTasks.reduce((sum, task) => sum + task.actualTime, 0);
+
+            let summaryHTML = `
+                <h2>Daily Summary</h2>
+                <p><strong>Total Estimated Time:</strong> ${totalEstimatedTime} minutes</p>
+                <p><strong>Total Actual Time:</strong> ${totalActualTime} minutes</p>
+                <h3>Tasks Breakdown:</h3>
+            `;
+
+            todaysTasks.forEach(task => {
+                summaryHTML += `
+                    <p><strong>${task.title}:</strong> Estimated ${task.estimatedTime} minutes, Actual ${task.actualTime} minutes</p>
+                `;
+            });
+
+            dailySummary.innerHTML = summaryHTML;
+        }
+
+        function updateWeeklyOverview() {
+            const weeklyOverview = document.getElementById('weeklyOverview');
+            const today = new Date();
+            const startOfWeek = new Date(today.setDate(today.getDate() - today.getDay()));
+            const endOfWeek = new Date(today.setDate(today.getDate() - today.getDay() + 6));
+
+            const weekTasks = tasks.filter(task => {
+                const taskDate = new Date(task.day);
+                return taskDate >= startOfWeek && taskDate <= endOfWeek;
+            });
+
+            const totalEstimatedTime = weekTasks.reduce((sum, task) => sum + task.estimatedTime, 0);
+            const totalActualTime = weekTasks.reduce((sum, task) => sum + task.actualTime, 0);
+
+            let overviewHTML = `
+                <h2>Weekly Overview</h2>
+                <p><strong>Total Estimated Time:</strong> ${totalEstimatedTime} minutes</p>
+                <p><strong>Total Actual Time:</strong> ${totalActualTime} minutes</p>
+            `;
+
+            weeklyOverview.innerHTML = overviewHTML;
+        }
+
+        document.getElementById('taskForm').addEventListener('submit', addTask);
+        document.getElementById('showAllTasks').addEventListener('click', () => renderTasks('all'));
+        document.getElementById('showTodayTasks').addEventListener('click', () => renderTasks('today'));
+        document.getElementById('searchInput').addEventListener('input', () => renderTasks());
+
+        renderTasks();
+        updateDailySummary();
+        updateWeeklyOverview();
+    </script>
+</body>
+</html>
